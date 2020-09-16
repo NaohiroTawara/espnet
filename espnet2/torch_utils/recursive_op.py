@@ -51,3 +51,20 @@ def recursive_average(obj, weight: torch.Tensor, distributed: bool = False):
     # Normalize weight to be sum-to-1
     obj = recursive_divide(obj, weight)
     return obj, weight
+
+
+def recursive_gather(output_obj, obj, distributed: bool = False):
+    if isinstance(obj, (tuple, list)):
+        return type(obj)(recursive_gather(o, v, distributed) for o, v in zip(output_obj, obj))
+    elif isinstance(obj, dict):
+        return {k: recursive_gather(v_o, v, distributed)
+                for (k_o, v_o), (k, v) in zip(output_obj.items(), obj.items())}
+    elif isinstance(obj, torch.Tensor):
+        if distributed:
+            # Note(naohiro): gather has not been implemented in NCCL, so all_gather is used.
+            torch.distributed.all_gather(output_obj, obj)
+        return output_obj
+    elif obj is None:
+        return None
+    else:
+        raise ValueError(type(obj))
