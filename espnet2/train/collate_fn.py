@@ -91,7 +91,10 @@ def common_collate_fn(
         # tensor_list: Batch x (Length, ...)
         tensor_list = [torch.from_numpy(a) for a in array_list]
         # tensor: (Batch, Length, ...)
-        tensor = pad_list(tensor_list, pad_value)
+        if key not in not_sequence:
+            tensor = pad_list(tensor_list, pad_value)
+        else:
+            tensor = torch.Tensor(tensor_list)
         output[key] = tensor
 
         # lens: (Batch,)

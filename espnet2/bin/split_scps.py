@@ -37,8 +37,8 @@ def split_scps(
     # Remove existing files
     for n in range(num_splits):
         for name in names:
-            if (Path(output_dir) / name / f"split.{n}").exists():
-                (Path(output_dir) / name / f"split.{n}").unlink()
+            if (Path(output_dir) / name / f"split.{n+1}").exists():
+                (Path(output_dir) / name / f"split.{n+1}").unlink()
 
     counter = Counter()
     linenum = -1
@@ -58,7 +58,7 @@ def split_scps(
         # Write lines respectively
         for line, name in zip(lines, names):
             # To reduce the number of opened file descriptors, open now
-            with (Path(output_dir) / name / f"split.{num}").open(
+            with (Path(output_dir) / name / f"split.{num+1}").open(
                 "a", encoding="utf-8"
             ) as f:
                 f.write(line)

@@ -184,12 +184,14 @@ class ESPnetSREModel(AbsESPnetModel):
         """
         # Training mode
         if "spkid" in kwargs:
-            assert set(kwargs) == {"speech", "spkid"}, set(kwargs)
+            assert set(kwargs) == {"speech", "speech_lengths", "spkid"}, set(kwargs)
             speech = kwargs["speech"]
             spkid = kwargs["spkid"]
+            speech_lengths = kwargs["speech_lengths"]
 
             assert speech.dim() == 3, speech.shape
             assert spkid.dim() == 1, spkid.shape
+            assert speech_lengths.dim() == 1, speech_lengths.shape
             return {
                 "speech": speech,
                 "speech_lengths": torch.full(

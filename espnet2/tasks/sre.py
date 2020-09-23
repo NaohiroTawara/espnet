@@ -3,7 +3,6 @@ import logging
 from typing import Tuple
 import warnings
 
-import numpy as np
 import torch
 from typeguard import check_argument_types
 from typeguard import check_return_type
@@ -16,7 +15,6 @@ from espnet2.layers.utterance_mvn import UtteranceMVN
 from espnet2.sre.data.pairwise_dataset import PairwiseDataset
 from espnet2.sre.data.pairwise_batch_sampler import PairwiseBatchSampler
 from espnet2.sre.data.chunk_preprocessor import FeatsExtractChunkPreprocessor
-from espnet2.sre.data.chunk_preprocessor import ChunkPreprocessor
 from espnet2.sre.espnet_model import ESPnetSREModel
 from espnet2.sre.loss.aam_softmax_loss import AAMSoftmaxLoss
 from espnet2.sre.loss.abs_loss import AbsLoss
@@ -40,12 +38,14 @@ from espnet2.tasks.abs_task import IteratorOptions
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.class_choices import ClassChoices
 from espnet2.train.collate_fn import CommonCollateFn
-from espnet2.train.trainer import Trainer
 from espnet2.sre.train.trainer import SRETrainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
 from espnet2.utils.types import humanfriendly_parse_size_or_none
 from espnet2.utils.types import str_or_none
+
+from torch.utils.data import DataLoader
+
 
 
 net_choices = ClassChoices(
@@ -85,7 +85,7 @@ loss_choices = ClassChoices(
         angle_proto_loss=AngleProtoLoss,
     ),
     type_check=AbsLoss,
-    default="softmax",
+    default="angle_proto_loss",
 )
 
 
@@ -114,6 +114,7 @@ class SRETask(AbsTask):
             iterator_type="task", num_att_plot=0, valid_batch_type="unsorted"
         )
         group = parser.add_argument_group(description="Task related")
+
 
         # NOTE(kamo): add_arguments(..., required=True) can't be used
         # to provide --print_config mode. Instead of it, do as
@@ -236,34 +237,25 @@ class SRETask(AbsTask):
     @classmethod
     def build_collate_fn(cls, args: argparse.Namespace, train: bool):
         assert check_argument_types()
-        if train:
+        if train :
             # Use default_collate because we handle only fixed length chunk in this task
             return torch.utils.data.dataloader.default_collate
         else:
             # For validation or collect stats mode
             return CommonCollateFn(
-                float_pad_value=0.0, int_pad_value=0, not_sequence=["label"]
+                float_pad_value=0.0, int_pad_value=0, not_sequence=["label", "spkid"]
             )
 
     @classmethod
     def build_preprocess_fn(cls, args: argparse.Namespace, train: bool):
         assert check_argument_types()
-
-        data_type = args.train_data_path_and_name_and_type[0][-1]
         if not train:
             # Disable chunking for not training mode
             conf = args.preprocess_conf.copy()
             conf.update(cut_chunk=False)
-        if data_type == 'sound':
-            return FeatsExtractChunkPreprocessor(
-                train=train, utt2spk=args.utt2spk, fs=args.fs, **args.preprocess_conf
-            )
-        elif data_type == 'kaldi_ark':
-            return ChunkPreprocessor(
-                train=train, utt2spk=args.utt2spk, **args.preprocess_conf
-            )
-        else:
-            raise RuntimeError("Unknown training data type: {}".format(data_type))
+        return FeatsExtractChunkPreprocessor(
+            train=train, utt2spk=args.utt2spk, fs=args.fs, **args.preprocess_conf
+        )
 
     @classmethod
     def required_data_names(
@@ -272,7 +264,7 @@ class SRETask(AbsTask):
         assert check_argument_types()
         if inference:
             retval = ("speech",)
-        elif train:
+        elif train or cls.collect_stats_mode:
             retval = ("speech",)
         else:
             # For validation or collect stats mode
@@ -360,4 +352,9 @@ class SRETask(AbsTask):
             initialize(model, args.init)
 
         assert check_return_type(model)
+
+        # FIXME(tawara): Dirty design here. But for SRE task, whether collect_stats mode or not should be known for
+        #  required_data_names.
+        cls.collect_stats_mode = args.collect_stats
         return model
+

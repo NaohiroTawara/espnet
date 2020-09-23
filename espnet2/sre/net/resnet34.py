@@ -78,7 +78,7 @@ class ResNet34(AbsNet):
     ):
         assert check_argument_types()
         if input_size != 40:
-            raise NotImplementedError("input_size must be 40")
+            raise NotImplementedError(f"input_size must be 40 but got {input_size}")
         super().__init__()
 
         self._output_size = num_filters[-1]
