@@ -15,7 +15,7 @@ from espnet2.sre.net.abs_net import AbsNet
 from espnet2.sre.net.resnnet_blocks import BasicBlock
 
 
-class ResNet34(AbsNet):
+class ResNet34v2(AbsNet):
     block = BasicBlock
 
     def __init__(
@@ -29,18 +29,16 @@ class ResNet34(AbsNet):
             raise NotImplementedError(f"input_size must be 40 but got {input_size}")
         super().__init__()
 
-        self._output_size = num_filters[-1]
+        self._output_size = num_filters[-1] * int(input_size / 8)
         self.inplanes = num_filters[0]
-        self.conv1 = nn.Conv2d(1, num_filters[0], kernel_size=7, stride=(2, 1), padding=3, bias=False)
+        self.conv1 = nn.Conv2d(1, num_filters[0], kernel_size=3, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(num_filters[0])
         self.relu = nn.ReLU(inplace=True)
 
         self.layer1 = self._make_layer(num_filters[0], layers[0])
         self.layer2 = self._make_layer(num_filters[1], layers[1], stride=(2, 2))
         self.layer3 = self._make_layer(num_filters[2], layers[2], stride=(2, 2))
-        self.layer4 = self._make_layer(num_filters[3], layers[3], stride=(1, 1))
-
-        self.avgpool = nn.AvgPool2d((5, 1), stride=1)
+        self.layer4 = self._make_layer(num_filters[3], layers[3], stride=(2, 2))
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -58,7 +56,7 @@ class ResNet34(AbsNet):
                     planes * self.block.expansion,
                     kernel_size=1,
                     stride=stride,
-                    bias=False,
+                    bias=False
                 ),
                 nn.BatchNorm2d(planes * self.block.expansion),
             )
@@ -87,9 +85,10 @@ class ResNet34(AbsNet):
             x: (B, L, D)
             x_lengths: (B,)
         Returns:
-            (B, L // 4, O)
+            (B, L // 8, O)
         """
         # x: (B, L, D) -> (B, D, L) -> (B, 1, D, L)
+
         x = x.transpose(1, 2).unsqueeze(1)
         x = self.conv1(x)
         x = self.bn1(x)
@@ -100,14 +99,14 @@ class ResNet34(AbsNet):
         x = self.layer2(x)
         # x_lengths -> x_lengths // 2
         x = self.layer3(x)
+        # x_lengths -> x_lengths // 2
         x = self.layer4(x)
 
-        # Average pooling along dimension axis
-        x = self.avgpool(x)
+        x = x.reshape(x.size()[0],-1,x.size()[-1])
 
-        assert x.size(2) == 1, x.size()
+        #assert x.size(2) == 1, x.size()
         # x: (B, O, 1, L) -> (B, O, L)
-        x = x.squeeze(dim=2)
+        #x = x.squeeze(dim=2)
         # x: (B, O, L) -> (B, L, O)
         x = x.transpose(1, 2)
 

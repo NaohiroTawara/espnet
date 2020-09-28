@@ -7,7 +7,7 @@ pooling: sap
 # minibatch related
 max_seg_per_spk: 100
 num_pair: 2
-batch_size: 128
+batch_size: 200
 
 # optimizer related
 optim: adam

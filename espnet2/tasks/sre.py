@@ -10,7 +10,8 @@ from typeguard import check_return_type
 from espnet2.iterators.sequence_iter_factory import SequenceIterFactory
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.layers.global_mvn import GlobalMVN
-from espnet2.layers.instance_norm import ESPnetInstanceNorm1d
+#from espnet2.layers.instance_norm import ESPnetInstanceNorm1d
+from espnet2.sre.layers.instance_norm import ESPnetInstanceNorm1d
 from espnet2.layers.utterance_mvn import UtteranceMVN
 from espnet2.sre.data.pairwise_dataset import PairwiseDataset
 from espnet2.sre.data.pairwise_batch_sampler import PairwiseBatchSampler
@@ -26,12 +27,13 @@ from espnet2.sre.loss.proto_loss import ProtoLoss
 from espnet2.sre.loss.softmax_loss import SoftmaxLoss
 from espnet2.sre.net.abs_net import AbsNet
 from espnet2.sre.net.resnet34 import ResNet34
+from espnet2.sre.net.resnet34v2 import ResNet34v2
 from espnet2.sre.net.vggvox import VGGVox
 from espnet2.sre.net.tdnn import TDNN
 from espnet2.sre.pooling.abs_pooling import AbsPooling
 from espnet2.sre.pooling.global_average_pooling import GlobalAveragePooling
 from espnet2.sre.pooling.global_max_pooling import GlobalMaxPooling
-from espnet2.sre.pooling.self_attention_pooling import SelfAttentionPooling
+from espnet2.sre.pooling.self_attention_pooling import SelfAttentionPooling, SelfAttentionPoolingV2
 from espnet2.sre.pooling.statistical_pooling import StatisticalPooling
 from espnet2.tasks.abs_task import AbsTask
 from espnet2.tasks.abs_task import IteratorOptions
@@ -50,7 +52,7 @@ from torch.utils.data import DataLoader
 
 net_choices = ClassChoices(
     "net",
-    classes=dict(vggvox=VGGVox, resnet=ResNet34, tdnn=TDNN),
+    classes=dict(vggvox=VGGVox, resnet=ResNet34, tdnn=TDNN, resnetv2=ResNet34v2),
     type_check=AbsNet,
     default="resnet",
 )
@@ -249,10 +251,11 @@ class SRETask(AbsTask):
     @classmethod
     def build_preprocess_fn(cls, args: argparse.Namespace, train: bool):
         assert check_argument_types()
-        if not train:
+        # if not train:
             # Disable chunking for not training mode
-            conf = args.preprocess_conf.copy()
-            conf.update(cut_chunk=False)
+        #    conf = args.preprocess_conf.copy()
+        #    conf.update(cut_chunk=False)
+        # Note[tawara] Chunking is applied for both training and validation
         return FeatsExtractChunkPreprocessor(
             train=train, utt2spk=args.utt2spk, fs=args.fs, **args.preprocess_conf
         )
@@ -309,6 +312,8 @@ class SRETask(AbsTask):
         # 3. Build internal network
         pooling_class = pooling_choices.get_class(args.pooling)
         if issubclass(pooling_class, SelfAttentionPooling):
+            if type(net) is ResNet34v2:
+                pooling_class = SelfAttentionPoolingV2
             pooling = pooling_class(input_size=net.output_size(), **args.pooling_conf)
         else:
             pooling = pooling_class(**args.pooling_conf)
@@ -318,12 +323,7 @@ class SRETask(AbsTask):
         if type(pooling) == StatisticalPooling:
             if pooling.pooling_type == 'mean_std':
                 output_size *= 2
-        embedding = torch.nn.Sequential(
-            torch.nn.Linear(output_size, args.embed_size),
-            torch.nn.BatchNorm1d(args.embed_size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(args.embed_size, args.embed_size),
-        )
+        embedding = torch.nn.Linear(output_size, args.embed_size)
 
             # 5. Build loss function
         loss_class = loss_choices.get_class(args.loss)

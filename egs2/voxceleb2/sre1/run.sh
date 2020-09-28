@@ -16,4 +16,5 @@ audio_format=wav
     --nj 4 \
     --valid_set test \
     --test_sets "test" \
+    --sre_config conf/train_sre_resnet34_softmax.yaml \
     "$@"

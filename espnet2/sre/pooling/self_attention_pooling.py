@@ -42,3 +42,41 @@ class SelfAttentionPooling(AbsPooling):
         # x: (B, L, O) * w: (B, L, 1) -> x: (B, L, O) -> x: (B, O)
         x = torch.sum(x * w, dim=1)
         return x
+
+class SelfAttentionPoolingV2(AbsPooling):
+    def __init__(self, input_size: int, hidden_size: int = 128):
+        super().__init__()
+        assert check_argument_types()
+
+        self.attention = torch.nn.Sequential(
+            torch.nn.Conv1d(input_size, hidden_size, kernel_size=1),
+            torch.nn.ReLU(),
+            torch.nn.BatchNorm1d(hidden_size),
+            torch.nn.Conv1d(hidden_size, input_size, kernel_size=1),
+            torch.nn.Softmax(dim=2),
+            )
+
+    @staticmethod
+    def new_parameter(*size):
+        out = torch.nn.Parameter(torch.FloatTensor(*size))
+        torch.nn.init.xavier_normal_(out)
+        return out
+
+    def forward(self, x: torch.Tensor, x_lengths: torch.Tensor = None):
+        """Forward
+
+        Args:
+            x: (B, L, D)
+            x_lengths: (B,)
+        Returns:
+            (B, D)
+        """
+        # x: (B, L, O) -> (B, O, L)
+        x = torch.transpose(x, 1, 2)
+        w = self.attention(x)
+
+        if x_lengths is not None:
+            w.masked_fill_(make_pad_mask(x_lengths, w, 1), -float("inf"))
+        # x: (B, O, L) * w: (B, O, L) -> x: (B, O, L) -> x: (B, O)
+        x = torch.sum(x * w, dim=-1)
+        return x

@@ -90,18 +90,19 @@ class ESPnetSREModel(AbsESPnetModel):
         """Evaluation mode.
 
         Args (eval mode):
-            speech: (B, L, D), Extracted feature. e.g. MFCC
-            speech_lengths: (B,)
-            reference: (B, L, D), Extracted feature. e.g. MFCC
-            reference_lengths: (B,)
+            speech: (B, N, L, D), Extracted feature. e.g. MFCC (B: batch, N: num of chunks, L: length, D: dim)
+            speech_lengths: (B, )
+            reference: (B, N, L, D), Extracted feature. e.g. MFCC
+            reference_lengths: (B, )
             label: (B,) Label having 0 or 1 values
         """
-        assert speech.dim() == 3, speech.shape
+        assert speech.dim() == 4, speech.shape
         assert speech_lengths.dim() == 1, speech_lengths.shape
-        assert reference.dim() == 3, reference.shape
+        assert reference.dim() == 4, reference.shape
         assert reference_lengths.dim() == 1, reference_lengths.shape
 
         # dist: (B,)
+
         score, _, _ = self.compute_score(
             speech=speech,
             speech_lengths=speech_lengths,
@@ -109,7 +110,7 @@ class ESPnetSREModel(AbsESPnetModel):
             reference_lengths=reference_lengths,
         )
 
-        stats = dict(score=score.detach(),label=label.squeeze().detach())
+        stats = dict(score=score.detach(), label=label.squeeze().detach())
         batch_size = len(speech)
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
         loss, stats, weight = force_gatherable((None, stats, batch_size), score.device)
@@ -125,26 +126,34 @@ class ESPnetSREModel(AbsESPnetModel):
         """Compute score between two input speech
 
         Args (eval mode):
-            speech: (B, L, D), Extracted feature. e.g. MFCC
-            speech_lengths: (B,)
-            reference: (B, L, D), Extracted feature. e.g. MFCC
-            reference_lengths: (B,)
+            speech: (B, N, L, D), Extracted feature. e.g. MFCC
+            speech_lengths: (B, )
+            reference: (B, N, L, D), Extracted feature. e.g. MFCC
+            reference_lengths: (B, )
             label: (B,)
         Returns:
             score, x, y: (B,), (B, O), (B, O)
         """
-        assert speech.dim() == 3, speech.shape
+        assert speech.dim() == 4, speech.shape
         if speech_lengths is not None:
             assert speech_lengths.dim() == 1, speech_lengths.shape
-        assert reference.dim() == 3, reference.shape
+        assert reference.dim() == 4, reference.shape
         if reference_lengths is not None:
             assert reference_lengths.dim() == 1, reference_lengths.shape
 
-        x = self.compute_embed_vector(speech, speech_lengths)
-        y = self.compute_embed_vector(reference, reference_lengths)
+        batch_size, num_eval, _, _ = speech.shape
+        speech = speech.view(-1, speech.shape[2], speech.shape[3])
+        reference = reference.view(-1, reference.shape[2], reference.shape[3])
 
-        # x: (B, O), y: (B, O) -> dist: (B,)
-        score = torch.nn.functional.cosine_similarity(x, y)
+        x = self.compute_embed_vector(speech)
+        y = self.compute_embed_vector(reference)
+
+        # (B*N, O) -> (B, N, O)
+        x = x.view(batch_size, num_eval, -1)
+        y = y.view(batch_size, num_eval, -1)
+        # x: (B, N, O), y: (B, N, O) -> dist: (B, N, N)
+        score = torch.cdist(x, y)
+        score = score.mean([1, 2]) * -1
         return score, x, y
 
     def compute_embed_vector(

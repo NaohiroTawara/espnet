@@ -119,6 +119,7 @@ class PairwiseBatchSampler(AbsSampler):
         #               Note that the number of batches might be reduced here.
         key_list = []
         mix_spk = []
+        logging.info(len(pairs))
         for pair in pairs:
             startbatch = len(mix_spk) - len(mix_spk) % self.batch_size
             spk = self.utt2spk_dict[pair[0]]

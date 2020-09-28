@@ -72,13 +72,17 @@ class FeatsExtractChunkPreprocessor:
         vad_energy_threshold: float = 0.0,
         vad_energy_mean_scale: float = 0.5,
         cut_chunk: bool = True,
-        chunk_length: int = 200,
+        train_chunk_length: int = 200,
+        valid_chunk_length: int = 200,
         seed: int = 0,
         eps: float = 1.0e-10,
+        chunk_num: int = 1,
     ):
         assert check_argument_types()
-        if cut_chunk and chunk_length <= 0:
-            raise ValueError(f"chunk_length < 0: {chunk_length}")
+        if cut_chunk and train_chunk_length <= 0:
+            raise ValueError(f"chunk_length < 0: {train_chunk_length}")
+        if cut_chunk and valid_chunk_length <= 0:
+            raise ValueError(f"chunk_length < 0: {valid_chunk_length}")
         if feats_type not in ("spectrogram", "fbank", "mfcc"):
             raise ValueError(f"feats_type={feats_type}")
 
@@ -115,7 +119,9 @@ class FeatsExtractChunkPreprocessor:
 
         # Chunk related
         self.cut_chunk = cut_chunk
-        self.chunk_length = chunk_length
+        self.train_chunk_length = train_chunk_length
+        self.valid_chunk_length = valid_chunk_length
+        self.chunk_num = chunk_num
         self.seed = seed
         self.random_state = np.random.RandomState(self.seed)
 
@@ -151,12 +157,18 @@ class FeatsExtractChunkPreprocessor:
             data["spkid"] = np.array(spkid)
 
             x = data["speech"]
+            if isinstance(x, tuple):
+                x = x[1]
             assert isinstance(x, np.ndarray), type(x)
             xs = [x]
 
         elif set(data) == {"speech", "reference", "label"}:
             x = data["speech"]
             y = data["reference"]
+            if isinstance(x, tuple):
+                x = x[1]
+            if isinstance(y, tuple):
+                y = y[1]
             assert isinstance(x, np.ndarray), type(x)
             assert isinstance(y, np.ndarray), type(y)
             if data["label"].ndim != 1:
@@ -245,13 +257,17 @@ class FeatsExtractChunkPreprocessor:
 
             # 3. Cut chunk
             if self.cut_chunk:
-                if len(x) < self.chunk_length:
+                if self.train:
+                    chunk_length = self.train_chunk_length
+                else:
+                    chunk_length = self.valid_chunk_length
+                if len(x) < chunk_length:
                     # Pad with wrap mode if utterance is too short
                     x = np.pad(
-                        x, [(0, self.chunk_length - len(x)), (0, 0)], mode="wrap",
+                        x, [(0, chunk_length - len(x)), (0, 0)], mode="wrap",
                     )
 
-                elif len(x) == self.chunk_length:
+                elif len(x) == chunk_length:
                     pass
 
                 else:
@@ -259,11 +275,14 @@ class FeatsExtractChunkPreprocessor:
                         # Derive a chunk from utterance randomly
                         # Note(kamo): If num_workers>1, the result is not deterministic.
                         offset = self.random_state.randint(
-                            0, len(x) - self.chunk_length
+                            0, len(x) - self.train_chunk_length
                         )
-                        x = x[offset : offset + self.chunk_length]
+                        x = x[offset : offset + self.train_chunk_length]
                     else:
-                        x = x[: self.chunk_length]
+                        # Derive self.chunk_num chunks from utterance
+                        # Note(tawara): In evaluation mode with cut_chunk=True, the utterance is devided into some chunks.
+                        offsets = np.linspace(0, len(x) - chunk_length, self.chunk_num + 1, dtype=np.int32)
+                        x = np.stack([x[offset:offset + chunk_length] for offset in offsets[:-1]])
 
             retval.append(x)
 

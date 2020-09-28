@@ -1,7 +1,7 @@
 from espnet2.train.trainer import *
 from espnet2.torch_utils.recursive_op import recursive_gather
 from espnet2.sre.utils import calculate_eer
-import numpy as np
+
 class SRETrainer(Trainer):
 
     @classmethod
@@ -38,14 +38,7 @@ class SRETrainer(Trainer):
 
             _, stats, weight = model(**batch)
             if ngpu > 1 or distributed:
-                # Apply weighted averaging for stats.
                 # if distributed, this method can also apply all_gather()
-                #gathered_stats1 = [torch.empty_like(stats['score']) for _ in range(torch.distributed.get_world_size())]
-                #gathered_stats2 = [torch.empty_like(stats['label']) for _ in range(torch.distributed.get_world_size())]
-                #torch.distributed.all_gather(gathered_stats1, stats['score'])
-                #torch.distributed.all_gather(gathered_stats2, stats['label'])
-                #stats = {'score': gathered_stats1, 'label': gathered_stats2}
-                #gathered_stats = {'score': gathered_stats1, 'label': gathered_stats2}
                 ws = torch.distributed.get_world_size()
                 batch_sizes = [torch.tensor(1).to("cuda" if ngpu > 0 else "cpu") for _ in range(ws)]
                 torch.distributed.all_gather(batch_sizes, torch.tensor(stats['score'].shape[0]).to("cuda" if ngpu > 0 else "cpu") )
@@ -59,9 +52,8 @@ class SRETrainer(Trainer):
                 stats = recursive_gather(gathered_stats, stats, distributed)
             scores.extend([score.cpu().view(-1) for score in stats['score']])
             labels.extend([label.cpu().view(-1) for label in stats['label']])
-            # Note(Naohiro): Do not report score in each batch
-            #                because EER must be calculated over all batches
-
+            # Note(tawara): Do not report score in each batch
+            #               because EER must be calculated over all batches
         else:
             if distributed:
                 iterator_stop.fill_(1)
