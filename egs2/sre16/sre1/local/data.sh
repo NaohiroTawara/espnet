@@ -100,10 +100,10 @@ kaldi_sre=$KALDI_ROOT/egs/sre16/v2/
 if [ $stage -le 1 ]; then
     log "stage 1: Generate scp files"
 
-    local/make_fisher.sh $FISHER1/ $FISHER1_TRANS/ $data_dir/fisher
-    local/make_fisher.sh $FISHER2/ $FISHER2_TRANS/ $data_dir/fisher
+    local/make_fisher.sh $FISHER1/ $FISHER1_TRANS/ $data_dir/fisher1
+    local/make_fisher.sh $FISHER2/ $FISHER2_TRANS/ $data_dir/fisher2
     utils/combine_data.sh $data_dir/fisher \
-        $data_dir/fisher1 $data_dir/fisher1
+        $data_dir/fisher1 $data_dir/fisher2
      utils/validate_data_dir.sh --no-text --no-feats $data_dir/fisher
 
     if [ ! -e $data_dir/local/speaker_list ] ; then
