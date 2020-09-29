@@ -15,5 +15,8 @@ max_epoch: 500
 
 # preprocessor related
 preprocess_conf:
-  chunk_length: 200
-  apply_vad: False
+  train_chunk_length: 200
+  valid_chunk_length: 300
+  apply_vad: True
+  vad_energy_threshold: 5.5
+  chunk_num: 10

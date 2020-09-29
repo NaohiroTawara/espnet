@@ -93,6 +93,7 @@ Options:
     --skip_train     # Skip training stages (default="${skip_train}").
     --skip_eval      # Skip decoding and evaluation stages (default="${skip_eval}").
     --skip_upload    # Skip packing and uploading stages (default="${skip_upload}").
+    --skip_dumping   # Skip dumping original wavs to dumpdir
     --collect_feats  # Collect feats and dump them in npy format for training
     --ngpu           # The number of gpus ("0" uses cpu, otherwise use gpu, default="${ngpu}").
     --num_nodes      # The number of nodes
@@ -335,12 +336,11 @@ fi
 
 # ========================== Data preparation is done here. =========================
 
-
 if ! "${skip_train}"; then
     if "${collect_feats}"; then
         if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             log "Stage 5: : Compute feats, apply_vad, and dump them into npy format: train_set=${data_feats}/${train_set}, valid_set=${data_feats}/${valid_set}"
-            # Note[tawara]: This step can be skipped but contributes to deduce data I/O because datasize is reduced after VAD.
+            # Note[tawara]: This step can be skipped but contributes to deduce data I/O because length of utterance can be reduced after VAD.
 
             utils/split_data.sh ${data_feats}/$train_set $nj
             for f in wav.scp utt2spk; do
@@ -355,10 +355,10 @@ if ! "${skip_train}"; then
             for i in $(seq 1 $nj); do
                 mv ${data_feats}/$valid_set/split${nj}utt/$i/wav.scp ${data_feats}/$valid_set/split${nj}utt/$i/ref.scp
                 for f in anc.scp label ; do
-                    utils/filter_scp.pl ${data_feats}/$valid_set/split${nj}utt/$i/ref.scp ${data_feats}/$valid_set/$f > ${data_feats}/$valid_set/split${nj}utt/$i/$f
+                    utils/filter_scp.pl ${data_feats}/$valid_set/split${nj}utt/$i/ref.scp ${data_feats}/$valid_set/$f \
+                        > ${data_feats}/$valid_set/split${nj}utt/$i/$f
                 done
             done
-
 
             log "Generate '${sre_exp}/run.sh'. You can resume the process from stage 5 using this script"
             mkdir -p "${sre_exp}"; echo "${run_args} --stage 5 \"\$@\"; exit \$?" > "${sre_exp}/run.sh"; chmod +x "${sre_exp}/run.sh"
@@ -389,7 +389,7 @@ if ! "${skip_train}"; then
                     --valid_data_path_and_name_and_type ${data_feats}/${valid_set}/split${nj}utt/JOB//label,label,text_int \
                     ${sre_args}
 
-            for s in $train_set $valid_set   ; do
+            for s in $train_set $valid_set ; do
                 for d in speech speech_lengths ; do
                     cat ${sre_exp}/splits${nj}/*/$s/collect_feats/$d.scp | sort > ${data_feats}/${train_set}/feats.scp
                 done

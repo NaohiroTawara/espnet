@@ -265,7 +265,7 @@ class FeatsExtractChunkPreprocessor:
                 if len(x) < chunk_length:
                     # Pad with wrap mode if utterance is too short
                     x = np.pad(
-                        x, [(0, chunk_length - len(x)), (0, 0)], mode="wrap",
+                        x, [(0, chunk_length - len(x)), (0, 0)], mode='constant'
                     )
 
                 elif len(x) == chunk_length:
