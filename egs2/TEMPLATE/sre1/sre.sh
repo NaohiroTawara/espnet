@@ -29,7 +29,7 @@ skip_data_prep=false # Skip data preparation stages
 skip_train=false     # Skip training stages
 skip_eval=false      # Skip decoding and evaluation stages
 skip_upload=true     # Skip packing and uploading stages
-skip_dumping=false   # Skip dumping
+skip_dumping=false   # Skip dumping original wavs to dumpdir
 collect_feats=false  # Collect feats and dump them in npy format for training
 ngpu=1               # The number of gpus ("0" uses cpu, otherwise use gpu).
 num_nodes=1          # The number of nodes
@@ -39,7 +39,7 @@ gpu_inference=true   # Whether to perform gpu decoding.
 dumpdir=dump         # Directory to dump features.
 expdir=exp           # Directory to save experiments.
 python=python3       # Specify python to execute espnet commands
-data_feats=data/
+
 # Data preparation related
 local_data_opts= # The options given to local/data.sh.
 
@@ -53,8 +53,7 @@ fs=16k                 # Sampling rate.
 min_wav_duration=1     # Minimum duration in second
 max_wav_duration=500   # Maximum duration in second
 apply_vad=false        # Apply frame-level vad
-
-s=16k                 # Sampling rate.
+s=16k                  # Sampling rate.
 
 # sre model related
 sre_tag=    # Suffix to the result dir for sre model training.
@@ -195,6 +194,13 @@ if [ -n "${speed_perturb_factors}" ]; then
     sre_exp="${sre_exp}_sp"
 fi
 
+if  "$skip_dumping" ; then
+    data_feats=data
+else
+    data_feats=$dumpdir
+fi
+
+
 # ========================== Main stages start from here. ==========================
 if ! "${skip_data_prep}"; then
     if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
@@ -236,6 +242,7 @@ if ! "${skip_data_prep}"; then
             # and it can also change the audio-format and sampling rate.
             # If nothing is need, then format_wav_scp.sh does nothing:
             # i.e. the input file format and rate is same as the output.
+            # Note[tawara] when utilizing collect_feats mode, this process is not needed because dumping is done in collect_feats
 
             for dset in "${train_set}" "${valid_set}" ${test_sets}; do
                 if [ "${dset}" = "${train_set}" ]; then
@@ -328,27 +335,39 @@ fi
 
 # ========================== Data preparation is done here. =========================
 
+
 if ! "${skip_train}"; then
     if "${collect_feats}"; then
         if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             log "Stage 5: : Compute feats, apply_vad, and dump them into npy format: train_set=${data_feats}/${train_set}, valid_set=${data_feats}/${valid_set}"
             # Note[tawara]: This step can be skipped but contributes to deduce data I/O because datasize is reduced after VAD.
 
-            _split_dir="${sre_exp}/splits${nj}"
-            if [ ! -f "${_split_dir}/.done" ]; then
-                for s in ${train_set} ${valid_set} ; do
-                    ${python} -m espnet2.bin.split_scps \
-                      --scps "${data_feats}/$s/wav.scp" \
-                      --num_splits "${nj}" \
-                      --output_dir "${_split_dir}/$s"
-                    touch "${_split_dir}/.done"
+            utils/split_data.sh ${data_feats}/$train_set $nj
+            for f in wav.scp utt2spk; do
+                cp ${data_feats}/$valid_set/$f ${data_feats}/$valid_set/$f.org
+            done
+            cp ${data_feats}/$valid_set/ref.scp ${data_feats}/$valid_set/wav.scp
+            cp ${data_feats}/$valid_set/label ${data_feats}/$valid_set/utt2spk
+            utils/split_data.sh --per-utt ${data_feats}/$valid_set $nj
+            for f in wav.scp utt2spk; do
+                mv ${data_feats}/$valid_set/$f.org ${data_feats}/$valid_set/$f
+            done
+            for i in $(seq 1 $nj); do
+                mv ${data_feats}/$valid_set/split${nj}utt/$i/wav.scp ${data_feats}/$valid_set/split${nj}utt/$i/ref.scp
+                for f in anc.scp label ; do
+                    utils/filter_scp.pl ${data_feats}/$valid_set/split${nj}utt/$i/ref.scp ${data_feats}/$valid_set/$f > ${data_feats}/$valid_set/split${nj}utt/$i/$f
                 done
-            else
-                log "${_split_dir}/.done exists. Spliting is skipped"
-            fi
+            done
+
 
             log "Generate '${sre_exp}/run.sh'. You can resume the process from stage 5 using this script"
             mkdir -p "${sre_exp}"; echo "${run_args} --stage 5 \"\$@\"; exit \$?" > "${sre_exp}/run.sh"; chmod +x "${sre_exp}/run.sh"
+
+            if "$skip_dumping" ; then
+                data_format=kaldi_ark
+            else
+                data_feats=sound
+            fi
 
             # 3. Submit jobs
             log "Collect-stats started... log: '${sre_exp}/stats.*.log'"
@@ -356,15 +375,18 @@ if ! "${skip_train}"; then
                 ${python} -m espnet2.bin.sre_train \
                     --collect_stats true \
                     --write_collected_feats true \
-                    --utt2spk "${data_feats}/${train_set}/utt2spk" \
+                    --utt2spk "${data_feats}/${train_set}/split${nj}/JOB/utt2spk" \
                     --fs "${fs}" \
                     --preprocess_conf apply_vad=${apply_vad} \
                     --output_dir "${sre_exp}"/splits${nj}/JOB \
                     --max_seg_per_spk 100000 \
                     --preprocess_conf cut_chunk=False \
                     --batch_size 1 \
-                    --train_data_path_and_name_and_type ${_split_dir}/$train_set/wav.scp/split.JOB,speech,kaldi_ark \
-                    --valid_data_path_and_name_and_type ${_split_dir}/$valid_set/wav.scp/split.JOB,speech,kaldi_ark \
+                    --allow_variable_data_keys true \
+                    --train_data_path_and_name_and_type ${data_feats}/${train_set}/split${nj}/JOB/wav.scp,speech,$data_format \
+                    --valid_data_path_and_name_and_type ${data_feats}/${valid_set}/split${nj}utt/JOB/anc.scp,speech,$data_format \
+                    --valid_data_path_and_name_and_type ${data_feats}/${valid_set}/split${nj}utt/JOB//ref.scp,reference,$data_format \
+                    --valid_data_path_and_name_and_type ${data_feats}/${valid_set}/split${nj}utt/JOB//label,label,text_int \
                     ${sre_args}
 
             for s in $train_set $valid_set   ; do

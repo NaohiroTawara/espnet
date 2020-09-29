@@ -244,6 +244,7 @@ class FeatsExtractChunkPreprocessor:
 
                     logging.debug(f"VAD: {uid}: {len(x)}frames -> {len(vad)}frames")
                     x = vad
+                    '''
                     if len(vad) == 0:
                         raise RuntimeError(
                             f"0 frames remain after VAD. Reconsider VAD parameters: "
@@ -254,7 +255,7 @@ class FeatsExtractChunkPreprocessor:
                             f"vad_energy_threshold={self.vad_energy_threshold}, "
                             f"vad_energy_mean_scale={self.vad_energy_mean_scale}",
                         )
-
+                    '''
             # 3. Cut chunk
             if self.cut_chunk:
                 if self.train:

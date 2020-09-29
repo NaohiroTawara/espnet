@@ -10,7 +10,6 @@ from typeguard import check_return_type
 from espnet2.iterators.sequence_iter_factory import SequenceIterFactory
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.layers.global_mvn import GlobalMVN
-#from espnet2.layers.instance_norm import ESPnetInstanceNorm1d
 from espnet2.sre.layers.instance_norm import ESPnetInstanceNorm1d
 from espnet2.layers.utterance_mvn import UtteranceMVN
 from espnet2.sre.data.pairwise_dataset import PairwiseDataset
@@ -270,7 +269,7 @@ class SRETask(AbsTask):
         elif train or cls.collect_stats_mode:
             retval = ("speech",)
         else:
-            # For validation or collect stats mode
+            # For validation
             retval = ("speech", "reference", "label")
         assert check_return_type(retval)
         return retval
@@ -353,8 +352,8 @@ class SRETask(AbsTask):
 
         assert check_return_type(model)
 
-        # FIXME(tawara): Dirty design here. But for SRE task, whether collect_stats mode or not should be known for
-        #  required_data_names.
+        # FIXME(tawara): Dirty design here. But for SRE task, whether collect_stats mode or not should be known to
+        #  specifiy required_data_names.
         cls.collect_stats_mode = args.collect_stats
         return model
 
