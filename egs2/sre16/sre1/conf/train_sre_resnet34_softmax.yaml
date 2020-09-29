@@ -1,0 +1,23 @@
+# network architecture
+loss: softmax
+net: resnet
+normalize: instance_norm #utterance_mvn
+pooling: sap
+
+# minibatch related
+max_seg_per_spk: 100
+num_pair: 1
+batch_size: 400
+
+# optimizer related
+optim: adam
+max_epoch: 30
+
+# preprocessor related
+preprocess_conf:
+  train_chunk_length: 200
+  valid_chunk_length: 300
+  apply_vad: True
+  vad_energy_threshold: 5.5
+  chunk_num: 10
+

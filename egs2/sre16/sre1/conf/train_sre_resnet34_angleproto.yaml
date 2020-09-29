@@ -1,0 +1,19 @@
+# network architecture
+loss: angle_proto_loss
+net: resnet
+normalize: utterance_mvn
+pooling: sap
+
+# minibatch related
+max_seg_per_spk: 100
+num_pair: 2
+batch_size: 128
+
+# optimizer related
+optim: adam
+max_epoch: 500
+
+# preprocessor related
+preprocess_conf:
+  chunk_length: 200
+  apply_vad: False
