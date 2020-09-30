@@ -364,7 +364,7 @@ if ! "${skip_train}"; then
             mkdir -p "${sre_exp}"; echo "${run_args} --stage 5 \"\$@\"; exit \$?" > "${sre_exp}/run.sh"; chmod +x "${sre_exp}/run.sh"
 
             if "$skip_dumping" ; then
-                data_format=kaldi_ark
+                data_format=pipe_wav
             else
                 data_feats=sound
             fi
@@ -434,7 +434,6 @@ if ! "${skip_train}"; then
 
         else
             _opts+="--train_data_path_and_name_and_type ${data_feats}/${train_set}/${train_file} "
-            #_opts+="--train_data_path_and_name_and_type ${data_feats}/${train_set}/feats.scp,speech,kaldi_ark "
         fi
 
         log "Generate '${sre_exp}/run.sh'. You can resume the process from stage 6 using this script"
@@ -453,15 +452,15 @@ if ! "${skip_train}"; then
         ${python} -m espnet2.bin.launch \
             --cmd "${cuda_cmd} --name ${jobname}" \
             --log "${sre_exp}"/train.log \
-            --ngpu 5 \
+            --ngpu $ngpu \
             --num_nodes "${num_nodes}" \
             --init_file_prefix "${sre_exp}"/.dist_init_ \
             --multiprocessing_distributed true -- \
             ${python} -m espnet2.bin.sre_train \
-                --valid_data_path_and_name_and_type "${data_feats}/${valid_set}/wav.scp,speech,sound" \
-                --valid_data_path_and_name_and_type "${data_feats}/${valid_set}/ref.scp,reference,sound" \
+                --valid_data_path_and_name_and_type "${data_feats}/${valid_set}/anc.scp,speech,pipe_wav" \
+                --valid_data_path_and_name_and_type "${data_feats}/${valid_set}/ref.scp,reference,pipe_wav" \
                 --valid_data_path_and_name_and_type "${data_feats}/${valid_set}/label,label,text_int" \
-                --valid_shape_file "${data_feats}/${valid_set}/wav.scp" \
+                --valid_shape_file "${data_feats}/${valid_set}/anc.scp" \
                 --utt2spk "${data_feats}/${train_set}/utt2spk" \
                 --fs "${fs}" \
                 --resume true \

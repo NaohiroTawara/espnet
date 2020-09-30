@@ -157,18 +157,12 @@ class FeatsExtractChunkPreprocessor:
             data["spkid"] = np.array(spkid)
 
             x = data["speech"]
-            if isinstance(x, tuple):
-                x = x[1]
             assert isinstance(x, np.ndarray), type(x)
             xs = [x]
 
         elif set(data) == {"speech", "reference", "label"}:
             x = data["speech"]
             y = data["reference"]
-            if isinstance(x, tuple):
-                x = x[1]
-            if isinstance(y, tuple):
-                y = y[1]
             assert isinstance(x, np.ndarray), type(x)
             assert isinstance(y, np.ndarray), type(y)
             if data["label"].ndim != 1:
