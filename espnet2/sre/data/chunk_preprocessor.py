@@ -10,7 +10,8 @@ from scipy.fftpack import dct
 from typeguard import check_argument_types
 
 from espnet2.sre.utils import read_utt2spk
-
+import torchaudio
+import torch
 
 def lifter(cepstra: np.ndarray, L: int = 22) -> np.ndarray:
     """Apply a cepstral lifter the the matrix of cepstra.
@@ -55,7 +56,7 @@ class FeatsExtractChunkPreprocessor:
         train: bool,
         utt2spk: Union[str, Path],
         fs: int,
-        feats_type: str = "mfcc",
+        feats_type: str = "fbank",
         preemp_coeff: float = 0.97,
         n_fft: int = 512,
         hop_length: int = 128,
@@ -184,6 +185,7 @@ class FeatsExtractChunkPreprocessor:
             elif x.ndim == 1:
 
                 # 2.a. STFT
+
                 x = preemphasis(x, self.preemp_coeff)
                 # x: (Nsamples,) -> (Frames, Freq)
                 x = librosa.stft(
@@ -202,6 +204,7 @@ class FeatsExtractChunkPreprocessor:
                 if self.feats_type in ("fbank", "mfcc"):
                     # 2.b. log-FBANK
                     # mel: (Mel_freq, Freq)
+
                     mel = librosa.filters.mel(
                         self.fs, self.n_fft, self.n_mels, self.fmin, self.fmax
                     )
